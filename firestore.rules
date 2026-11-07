@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isBootstrappedAdmin() {
+      return isAuthenticated() && 
+             request.auth.token != null &&
+             request.auth.token.email != null &&
+             request.auth.token.email == 'officialharzolat@gmail.com';
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isStaff() {
+      return isAuthenticated() && (
+        isBootstrappedAdmin() ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          (
+            !('active' in getUserData()) ||
+            getUserData().active == true ||
+            getUserData().active == 'true'
+          ) && 
+          (
+            !('role' in getUserData()) ||
+            getUserData().role in ['owner', 'admin', 'editor', 'Owner', 'Admin', 'Editor', 'OWNER', 'ADMIN', 'EDITOR']
+          )
+        )
+      );
+    }
+
+    // Products
+    match /products/{document} {
+      allow read: if isStaff() || (resource != null && resource.data.status == 'published');
+      allow write: if isStaff();
+    }
+
+    // Materials
+    match /materials/{document} {
+      allow read: if isStaff() || (resource != null && resource.data.status == 'published');
+      allow write: if isStaff();
+    }
+
+    // Collections
+    match /collections/{document} {
+      allow read: if isStaff() || (resource != null && resource.data.status == 'published');
+      allow write: if isStaff();
+    }
+
+    // Product Inquiries
+    match /productInquiries/{document} {
+      allow create: if request.resource.data.customerName is string 
+                    && request.resource.data.customerName.size() > 0 
+                    && request.resource.data.customerName.size() <= 150
+                    && request.resource.data.email is string 
+                    && request.resource.data.email.size() > 0 
+                    && request.resource.data.email.size() <= 254
+                    && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 50))
+                    && (!('question' in request.resource.data) || (request.resource.data.question is string && request.resource.data.question.size() <= 5000))
+                    && (!('productName' in request.resource.data) || (request.resource.data.productName is string && request.resource.data.productName.size() <= 200))
+                    && request.resource.data.status == 'new'
+                    && !('role' in request.resource.data)
+                    && !('active' in request.resource.data);
+      allow read, update, delete: if isStaff();
+    }
+
+    // Custom Sewing Requests
+    match /customSewingRequests/{document} {
+      allow create: if request.resource.data.customer is map
+                    && request.resource.data.customer.email is string
+                    && request.resource.data.customer.email.size() > 0
+                    && request.resource.data.customer.email.size() <= 254
+                    && (!('name' in request.resource.data.customer) || (request.resource.data.customer.name is string && request.resource.data.customer.name.size() <= 150))
+                    && (!('phone' in request.resource.data.customer) || (request.resource.data.customer.phone is string && request.resource.data.customer.phone.size() <= 50))
+                    && (!('garmentType' in request.resource.data) || (request.resource.data.garmentType is string && request.resource.data.garmentType.size() <= 100))
+                    && (!('designVision' in request.resource.data) || (request.resource.data.designVision is string && request.resource.data.designVision.size() <= 10000))
+                    && (!('designDescription' in request.resource.data) || (request.resource.data.designDescription is string && request.resource.data.designDescription.size() <= 10000))
+                    && (!('styleNotes' in request.resource.data) || (request.resource.data.styleNotes is string && request.resource.data.styleNotes.size() <= 10000))
+                    && (!('inspirationImages' in request.resource.data) || (request.resource.data.inspirationImages is list && request.resource.data.inspirationImages.size() <= 20))
+                    && request.resource.data.status == 'new'
+                    && !('role' in request.resource.data)
+                    && !('active' in request.resource.data);
+      allow read, update, delete: if isStaff();
+    }
+
+    // Contact Submissions
+    match /contactSubmissions/{document} {
+      allow create: if request.resource.data.name is string 
+                    && request.resource.data.name.size() > 0 
+                    && request.resource.data.name.size() <= 150
+                    && request.resource.data.email is string 
+                    && request.resource.data.email.size() > 0 
+                    && request.resource.data.email.size() <= 254
+                    && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 50))
+                    && (!('message' in request.resource.data) || (request.resource.data.message is string && request.resource.data.message.size() <= 5000))
+                    && request.resource.data.status == 'new'
+                    && !('role' in request.resource.data)
+                    && !('active' in request.resource.data);
+      allow read, update, delete: if isStaff();
+    }
+
+    // Staff Users
+    match /users/{document} {
+      allow read: if (isAuthenticated() && request.auth.uid == document) || isStaff();
+      allow write: if (isAuthenticated() && request.auth.uid == document) || isStaff();
+    }
+
+    // Settings
+    match /settings/{document} {
+      allow read, write: if isStaff();
+    }
+  }
+}

@@ -1,0 +1,59 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isStaff() {
+      return isAuthenticated() &&
+        (
+          (firestore.exists(/databases/ai-studio-lumora-6244ba83-3055-4c48-a46c-01d7cf8cfdff/documents/users/$(request.auth.uid)) &&
+           firestore.get(/databases/ai-studio-lumora-6244ba83-3055-4c48-a46c-01d7cf8cfdff/documents/users/$(request.auth.uid)).data.active == true &&
+           firestore.get(/databases/ai-studio-lumora-6244ba83-3055-4c48-a46c-01d7cf8cfdff/documents/users/$(request.auth.uid)).data.role in ['owner', 'admin', 'editor'])
+          ||
+          (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+           firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active == true &&
+           firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['owner', 'admin', 'editor'])
+        );
+    }
+
+    // Public catalog product images
+    match /lumora/products/{allPaths=**} {
+      allow read: if true;
+      allow write: if isStaff()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Public catalog material images
+    match /lumora/materials/{allPaths=**} {
+      allow read: if true;
+      allow write: if isStaff()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Public collection images
+    match /lumora/collections/{allPaths=**} {
+      allow read: if true;
+      allow write: if isStaff()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Private customer custom sewing inspiration files
+    match /lumora/custom-sewing-inspiration/{allPaths=**} {
+      allow read: if isStaff();
+      allow create, update, delete: if isStaff()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Default deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
